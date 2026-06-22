@@ -1,0 +1,42 @@
+# ── Legacy GeneXus tree ──────────────────────────────────────────────
+# Generated regen output (~480MB), wiped on every Build All, and contains
+# legacy credentials (client.cfg). Never version it — it is reference-only.
+/Receituario/
+
+# ── App (has its OWN git repo + GitHub remote) — not tracked by the workspace repo ──
+/receituario-modern/
+
+# ── Local-only Claude settings (machine overrides) ──
+.claude/settings.local.json
+
+# ── Secrets (never commit) ───────────────────────────────────────────
+**/.env
+.env
+.env.*
+!**/.env.example
+**/client.cfg
+*.pem
+*.key
+*.p12
+*.pfx
+
+# ── Node / frontend ──────────────────────────────────────────────────
+**/node_modules/
+**/dist/
+**/.vite/
+npm-debug.log*
+
+# ── Java / backend build ─────────────────────────────────────────────
+**/target/
+*.class
+
+# ── Dev stack runtime (logs + PID files) ─────────────────────────────
+**/.devstack/
+*.log
+
+# ── IDE / OS ─────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db

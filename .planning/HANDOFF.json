@@ -1,0 +1,56 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-22T04:32:04-0300",
+  "project": "Receituário — migração GeneXus → Spring Boot 3 / React (migration factory)",
+  "phase": "Wave-4 / cross-cutting",
+  "phase_name": "SAU_PRO concluído (tested); próxima fundação = auditoria/auth (Wave 0)",
+  "phase_dir": ".planning/migration",
+  "status": "paused",
+  "note_no_gsd": "Este NÃO é um projeto GSD com phases/PLAN.md. É a fábrica de migração (.planning/migration/slices/*.slice.md). Handoff gravado no caminho default .planning/.",
+  "git": "NÃO é repositório git — o passo de WIP commit do workflow foi PULADO (impossível). Versionar artefatos é uma ação manual pendente, se desejado.",
+  "completed_tasks": [
+    {"id": 1, "name": "/verify-parity SAU_IMP — 22/22 PARITY; bug de filtro de data (PG 42P18) corrigido + teste de regressão", "status": "done"},
+    {"id": 2, "name": "/gx-extract SAU_PRO — SLICE-SPEC completa (32 regras; achado de senha de cert em texto puro)", "status": "done"},
+    {"id": 3, "name": "/migrate-slice SAU_PRO — backend+frontend+testes; 512 testes verdes; 3 defeitos achados+corrigidos", "status": "done"},
+    {"id": 4, "name": "/verify-parity SAU_PRO — 13/13 PARITY; snapshot restaurado; status=tested", "status": "done"},
+    {"id": 5, "name": "Skill /dev-stack + dev-up.sh/dev-down.sh — sobe db+backend(:8090)+frontend(:5173)", "status": "done"},
+    {"id": 6, "name": "Relatório de negócio (PDF 7 págs) + Resumo executivo (PDF 1 pág) + fonte .md, assinados Invictus.AI", "status": "done"}
+  ],
+  "remaining_tasks": [
+    {"id": 7, "name": "/gx-extract SAU_LOG (auditoria → common/audit) — RECOMENDADO próximo; fecha lacuna LGPD adiada em todas as fatias", "status": "not_started"},
+    {"id": 8, "name": "Alternativa: /gx-extract SAU_USU (autenticação real, substitui login stub)", "status": "not_started"},
+    {"id": 9, "name": "Concluir SAU_PRO → verified (depende de assinaturas + tornar enforçáveis as travas R22/R23/R24)", "status": "blocked"},
+    {"id": 10, "name": "~20 transações restantes (Ondas 0,4-restante,5,6,7) incl. SAU_PAC e SAU_RECESP (regulado)", "status": "not_started"}
+  ],
+  "blockers": [
+    {"description": "SAU_PRO não pode ir a 'verified' sem assinaturas DPO (LGPD) + regulatória (Portaria 344/98) + OQ-DG + R28", "type": "human_action", "workaround": "permanece em 'tested'; paridade já confirmada 13/13"},
+    {"description": "Auditoria é log-only (AuditService não persiste); login é stub de dev", "type": "technical", "workaround": "resolver na Onda 0 (SAU_LOG / SAU_USU)"},
+    {"description": "R22/R23/R24 delete-guards são stubs não-enforçáveis (tabelas ausentes na cópia live)", "type": "technical", "workaround": "confirmar nomes físicos (OQ-DG) antes do cutover de SAU_PRO"}
+  ],
+  "human_actions_pending": [
+    {"action": "Protocolar parecer regulatório Portaria 344/98 (SAU_RECESP/prescritor)", "context": "maior prazo do cronograma; independe da engenharia", "blocking": true},
+    {"action": "Validação do DPO sobre criptografia/acesso a certificados e PHI", "context": "gate de cutover de SAU_PRO (OQ1/OQ2)", "blocking": true}
+  ],
+  "decisions": [
+    {"decision": "SAU_PRO usa acesso nativo a SYS_PES (projeção/write-back), sem entidade SYS_PES", "rationale": "SYS_PES é Wave-0 não migrada; PK=FK supertipo; evita acoplamento prematuro"},
+    {"decision": "certificadoSenha: @JsonIgnore + AES-GCM fail-closed; cert/assinatura fora da API v1", "rationale": "legado guarda senha em texto puro; não portar o log em claro (R31)"},
+    {"decision": "Novo backend roda em :8090 (legado mantém :8080); frontend proxy aponta para :8090", "rationale": "evitar conflito com o app GeneXus no host Windows"},
+    {"decision": "PDFs gerados com pdfmake 0.2.7 (puro Node)", "rationale": "sem pandoc/LaTeX/Chromium no ambiente; 0.3.x e puppeteer falharam"}
+  ],
+  "uncommitted_files": [
+    "receituario-modern/backend/src/main/java/.../profissional/** (entity/dto/mapper/repo/service/web + CertificadoSenhaCryptoConverter + SoundexService)",
+    "receituario-modern/backend/src/test/java/.../profissional/** + parity/ProfissionalParityIT.java",
+    "receituario-modern/backend/src/main/resources/db/migration/V1__baseline.sql (SAU_PRO completado) + V8__sau_pro_profissional.sql",
+    "receituario-modern/backend/src/test/resources/parity/{impedimento,profissional}/PARITY-REPORT.md",
+    "receituario-modern/frontend/src/features/profissional/** + App.tsx + vite.config.ts (proxy 8080→8090)",
+    "receituario-modern/dev-up.sh, dev-down.sh",
+    ".claude/skills/dev-stack/SKILL.md",
+    ".planning/migration/slices/SAU_PRO.slice.md (specced→tested), SAU_IMP.slice.md (OQ2/OQ7 resolvidos)",
+    ".planning/RELATORIO-MIGRACAO-INVICTUS.{md,pdf}, .planning/RESUMO-EXECUTIVO-INVICTUS.pdf"
+  ],
+  "infrastructure_state": {
+    "dev_stack": "RODANDO — backend :8090 (login admin/admin123), frontend :5173, DB = cópia não-prod (host.docker.internal). PIDs em receituario-modern/.devstack/. Parar com ./dev-down.sh (ou /dev-stack down).",
+    "legacy_app": ":8080 no host Windows (GeneXus/Tomcat) — não tocar"
+  },
+  "next_action": "Rodar /gx-extract SAU_LOG (revisar a SLICE-SPEC antes de gerar código). Em paralelo (gestão): acionar assinaturas Portaria 344/98 + DPO. Stack de demo segue no ar em http://localhost:5173/."
+}
