@@ -118,7 +118,15 @@ parity:
     - "criar usuário: login único (R13), nome+login obrigatórios (R12), usupesquisa* default negado (R15)"
     - "deletar usuário referenciado por SAU_USUCON/SAU_USUUNI → bloqueado (R17)"
 
-status: specced
+status: backend   # backend de auth gerado & compilando 2026-06-29; suite completa 542 testes 0F/0E (sem regressão).
+# Gerado (…/seguranca/): Usuario (16 cols, ususen/usukey @JsonIgnore), UsuarioRepository (findByLogin, SAU_PRF
+# read-only, guards de delete), SauUsuUserDetailsService (@Profile !test&!local — auth real; bcrypt p/ usukey NULL,
+# usukey presente⇒"redefina senha"; UsuBloq⇒locked; SYSMAR⇒ROLE_SUPERUSER+admin+cadastro; perfil→roles coarse;
+# stamp últimoAcesso + audit LOGIN), UsuarioService+Controller (/api/usuarios admin, R12-R17), ChangePasswordController
+# (/auth/change-password R10/R11), V1 SAU_USU completado (16 cols). DevUserDetailsService mantido em local/test (ITs OK).
+# PENDENTE (sessão nova): test-author (testes de auth) + migration-reviewer + bridge --commit no cutover.
+# Deferidos: RBAC fino por-programa (SAU_PRFCON/USUCON), usupesquisa* (LGPD), validação dura de FK (R14 soft).
+status_was: specced
 ```
 
 ## Regras mineradas (auth — citação à linha; confiança anotada)
@@ -190,6 +198,25 @@ CREATE TABLE IF NOT EXISTS SAU_USU (
     CONSTRAINT pk_sau_usu PRIMARY KEY (UsuCod) );
 CREATE INDEX IF NOT EXISTS usau_usu ON SAU_USU (UsuLogin);
 ```
+
+## Resolved decisions (2026-06-29 — "usar o recomendado")
+
+- **OQ2 ✅ SYSMAR:** mapear o flag **`UsuSysmar=true`** para uma autoridade **`ROLE_SUPERUSER`** (bypassa
+  `@PreAuthorize`). **NÃO portar** o caminho mágico `login=='SYSMAR'` (só o flag booleano). Levantar/auditar
+  as contas com o flag continua sendo ação de segurança (não bloqueia o migrate).
+- **OQ7 ✅ JWT/RBAC:** reusar a infra JWT existente (HS256, `JwtService`, `/auth/login` + `/auth/refresh`).
+  Claims: `sub=UsuCod`, `login`, `roles`, `sysmar`, `profissionalId` (escopo PHI futuro). **Mapeamento de
+  autoridades COARSE em v1** (a paridade fina por-programa Inc/Alt/Exc/Con fica para uma fatia de autorização
+  posterior): no login → `UsuSysmar` ⇒ `ROLE_SUPERUSER`+`SAUDE_ADMIN`+`SAUDE_CADASTRO`; usuário não bloqueado
+  com perfil válido ⇒ `SAUDE_CADASTRO` (a role que TODAS as fatias migradas exigem); perfil "admin"
+  (via SAU_PRF, OQ8) ⇒ +`SAUDE_ADMIN`. Mantém as fatias migradas funcionando e substitui o login-stub.
+- **OQ8 ✅ Introspecção read-only:** autorizado ler **SAU_PRF** (nome do perfil → decidir admin) via query
+  nativa, sem migrar suas telas CRUD. **SAU_USUCON/SAU_PRFCON/SAU_USUUNI e o login-por-unidade (R3) ficam
+  DEFERIDOS** para a fatia de autorização fina — o login v1 NÃO exige seleção de unidade (simplificação
+  documentada vs legado).
+- **Perfis de execução:** manter `DevUserDetailsService` (admin/admin123) nos profiles **local/test** (não
+  quebrar as ITs/demo); a autenticação real SAU_USU entra no profile **default/prod**. Senha: bcrypt quando
+  `usukey IS NULL` (migrado pelo bridge); `usukey` presente ⇒ "redefina a senha" (não migrado).
 
 ## 🔴 OPEN QUESTIONS — LISTA DE SIGN-OFF DE SEGURANÇA (resolver ANTES de /migrate-slice)
 - **OQ1 ✅ RESOLVIDA (2026-06-28) — bridge via script offline → bcrypt.** Decisão do usuário: converter as
