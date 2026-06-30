@@ -267,18 +267,27 @@ inexistente/senha errada.
   `loadUserByUsername` (**antes** da verificação de senha no `AuthController`) e em **todo** `/auth/refresh`
   → super-reporta logins e re-carimba a cada refresh. Mover o audit/stamp para o ponto de sucesso de
   credencial no `AuthController` e distinguir login de refresh. (LGPD OQ5.)
-- **OQ12 (SAU_PRF — nomes de coluna não introspectados):** `findPerfilNome` assume `select prfnom from
-  sau_prf where prfcod=?` (inferido do glossário). Se errado, a elevação a admin **silenciosamente nunca
-  acontece** → todo não-SYSMAR vira só `SAUDE_CADASTRO` e admins perdem acesso no cutover. Introspectar o
-  banco vivo e confirmar `prfcod`/`prfnom` antes do cutover.
-- **OQ13 (elevação admin por substring "ADMIN"):** `isAdminProfile` casa substring case-insensitive "ADMIN"
-  no nome do perfil → "ADMINISTRATIVO"/"ADMISSAO" seriam elevados indevidamente a `ROLE_SAUDE_ADMIN`/`ROLE_ADMIN`
-  (acesso ao CRUD `/api/usuarios`). Confirmar o(s) nome(s)/código(s) reais do perfil admin e casar exato.
+- **OQ12 ✅ RESOLVIDA (2026-06-30, introspecção do snapshot vivo):** `sau_prf` tem exatamente
+  `(prfcod integer, prfnom varchar)` → a query `findPerfilNome` está correta.
+- **OQ13 ✅ RESOLVIDA (2026-06-30):** 0 de 10 perfis contêm "ADMIN" (ENFERMEIRO, ACS, ATENDENTE, CIRURGIÃO
+  DENTISTA, …) → o heurístico `adminProfileMatch="ADMIN"` é **inerte** nos dados reais (sem elevação
+  acidental); `/api/usuarios` CRUD fica **só-SYSMAR** em v1 (seguro). Admin fino por-programa = fatia de
+  autorização futura. (Também levantadas **12 contas SYSMAR** → input do audit OQ2.)
 - **OQ14 (nextUsuCod — full-scan + corrida):** `UsuarioService.nextUsuCod()` carrega TODOS os usuários para
   `max+1` (scan de tabela a cada create + janela de corrida → PK duplicada). Trocar por `select max(usucod)`
-  ou sequência; confiar na falha de PK para a corrida.
-- **OQ15 (fixtures de paridade ausentes):** não há `src/test/resources/parity/sau_usu/`. Criar os 8 cenários
-  do bloco `parity` antes de `/verify-parity`; o cenário **bloqueado-após-senha** é obrigatório (reproduz o
-  BLOCK acima). Lembrar a divergência documentada: login moderno v1 é só por login (R3 login-por-unidade
-  deferido para a fatia de autorização fina).
+  ou sequência; confiar na falha de PK para a corrida. (Resolver antes do cutover.)
+- **OQ15 ✅ RESOLVIDA (2026-06-30):** fixtures criados em `backend/src/test/resources/parity/sau_usu/`
+  (`scenarios.json` + `PARITY-REPORT.md`). **Veredito: BEHAVIORAL PARITY (6/8 cenários, IT-backed) +
+  golden-master de credencial DEFERIDO-AO-CUTOVER (2/8).** Live golden-master é impossível pré-bridge: o
+  login legado é form GX-AJAX (GXState/_EventName, não-drivável headless) E o snapshot tem só 1/1230
+  usuários migrados → o app novo rejeita 1229 por design e nenhum JWT é obtenível via SAU_USU real. Não se
+  mutou a tabela de segurança nem se rodou o bridge.
+
+## 🅿️ Veredito de paridade (2026-06-30)
+**BEHAVIORAL PARITY** confirmada (R3/R5/R10/R11/R2/R12/R13/R17 cobertas pela suíte de 37 testes, todos verdes;
+suíte completa 268/0F/0E). **Golden-master de credencial (login válido R1, bloqueado-após-senha R5 live)
+DEFERIDO ao cutover** — re-rodar contra `/auth/login` DEPOIS do `password-bridge --commit` num snapshot
+migrado (com backup SAU_USU + coordenação legado, OQ3); só então a fatia pode ir a `verified`. Cutover gates
+remanescentes: OQ2 (12 SYSMAR), OQ11 (timing do audit de login), OQ14 (nextUsuCod). **Status permanece
+`tested`** (honesto: a equivalência de credencial não é confirmável pré-bridge).
 ```
