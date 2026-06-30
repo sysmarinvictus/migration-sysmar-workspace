@@ -104,7 +104,14 @@ SYS_PES já existe (89 cols) em prod → `validate`. O **stub do baseline** (exp
 
 ## 🔴 OPEN QUESTIONS — SIGN-OFF NECESSÁRIO ANTES DE /migrate-slice
 - **OQ1 (estratégia de entidade — ARQUITETURAL):** entidade `Pessoa` **aditiva** (read/search + validação centralizada, SAU_PRO/SAU_FUN mantêm acesso nativo) **vs** refatorar os subtipos para `@OneToOne/@MapsId`. Acesso nativo já existe nos 2 subtipos migrados → introduzir um agregado `Pessoa` cria **risco de caminho de escrita duplo** na mesma tabela de 83k linhas. **Recomendado: aditivo** (entidade read-only + validadores compartilhados; sem refator dos subtipos). Decidir antes de qualquer código.
-- **OQ2 🔴 (SEGURANÇA — PesSenha/PesSenhaKey):** senha **reversível** (+key, len 100) NA pessoa, persistida pela BC mas **nenhum código minerado escreve/lê/verifica** — quem a define? É um 2º caminho de auth? Credencial de integração? **Tree-wide grep + sign-off de segurança ANTES de migrar.** NÃO mapear/expor às cegas; provavelmente virar hash e NUNCA round-trip no DTO. Paralelo ao achado SAU_USU (encrypt64).
+- **OQ2 🔴 RESOLVIDA (origem, 2026-06-30; sign-off de segurança ainda pendente):** `PesSenha` é
+  **criptografia REVERSÍVEL** — `cadastrarsenha.java:70`: `PesSenha = Encryption.encrypt64(senha, PesSenhaKey)`,
+  **mesmo esquema encrypt64 + chave por-linha do SAU_USU**. Definida pelo objeto `cadastrarsenha` e editada
+  via `hwwsau_pesf` (work-with de **SAU_PESF** = Pessoa Física / registro de profissional, Wave 4). É um
+  **2º caminho de credencial reversível** na pessoa (provável login de portal/autocadastro do profissional).
+  **Tratamento idêntico ao SAU_USU:** `@JsonIgnore`, **nunca** em DTO/API/OpenAPI/log/fixture; migrar via
+  **bridge p/ bcrypt** (reusar `tools/password-bridge`, adaptado p/ SYS_PES) OU quarentenar; **sign-off de
+  segurança antes do cutover**. Ver [[reference-rbac-engine-not-wired]] e a fatia SAU_USU.
 - **OQ3 (centralização = mudança de comportamento):** CPF/CNS check-digit+unicidade existem em SAU_PRO mas **não** em SAU_FUN; unicidade de CNS hoje é escopo-SAU_PRO. Centralizar na camada Pessoa muda comportamento (CPF/CNS validado p/ toda pessoa; CNS único person-wide). **Sign-off produto/regulatório.**
 - **OQ4 (LGPD nome social):** R2/R3 derivam o nome de exibição mas a BC não FORÇA consumidores a usá-lo. Auditar relatórios/impressões (receita, BPA) p/ garantir uso de `PesNomRegSoc`; impor no mapping do novo app.
 - **OQ5 (soundex mãe/social):** recomputo de `PesNomMae/SocSoundex` não localizado em SAU_PRO/SAU_FUN → confirmar em SAU_PAC.
