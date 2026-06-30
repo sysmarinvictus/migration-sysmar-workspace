@@ -118,15 +118,18 @@ parity:
     - "criar usuário: login único (R13), nome+login obrigatórios (R12), usupesquisa* default negado (R15)"
     - "deletar usuário referenciado por SAU_USUCON/SAU_USUUNI → bloqueado (R17)"
 
-status: backend   # backend de auth gerado & compilando 2026-06-29; suite completa 542 testes 0F/0E (sem regressão).
+status: tested   # backend + testes de auth + revisão 2026-06-30. Suite unit 268 testes 0F/0E (sem regressão; 2 skip pré-existentes).
 # Gerado (…/seguranca/): Usuario (16 cols, ususen/usukey @JsonIgnore), UsuarioRepository (findByLogin, SAU_PRF
 # read-only, guards de delete), SauUsuUserDetailsService (@Profile !test&!local — auth real; bcrypt p/ usukey NULL,
 # usukey presente⇒"redefina senha"; UsuBloq⇒locked; SYSMAR⇒ROLE_SUPERUSER+admin+cadastro; perfil→roles coarse;
 # stamp últimoAcesso + audit LOGIN), UsuarioService+Controller (/api/usuarios admin, R12-R17), ChangePasswordController
 # (/auth/change-password R10/R11), V1 SAU_USU completado (16 cols). DevUserDetailsService mantido em local/test (ITs OK).
-# PENDENTE (sessão nova): test-author (testes de auth) + migration-reviewer + bridge --commit no cutover.
+# Testes de auth (37): UsuarioServiceTest (18, R10-R17), SauUsuUserDetailsServiceTest (11, R1/R2/R5/R7/OQ8),
+# UsuarioSecurityTest (3, segredos @JsonIgnore + redação DTO/toString), AuthControllerTest (5, gate de emissão de token).
+# Revisão (migration-reviewer 2026-06-30): 1 BLOCK CORRIGIDO + FLAGs registrados como OQ11-OQ15 abaixo.
+# PENDENTE: /verify-parity (precisa de fixtures sau_usu) + bridge --commit no cutover.
 # Deferidos: RBAC fino por-programa (SAU_PRFCON/USUCON), usupesquisa* (LGPD), validação dura de FK (R14 soft).
-status_was: specced
+status_was: backend
 ```
 
 ## Regras mineradas (auth — citação à linha; confiança anotada)
@@ -243,4 +246,39 @@ CREATE INDEX IF NOT EXISTS usau_usu ON SAU_USU (UsuLogin);
 - **OQ8 (deps não migradas):** RBAC real precisa ler SAU_PRF/USUCON/PRFCON/PRG e SAU_USUUNI (login por unidade, R3). Decidir: introspecção read-only dessas tabelas para o login, sem migrar suas telas CRUD ainda. Confirmar se o login moderno exige seleção de unidade (R3) ou se o escopo de unidade muda no modelo JWT.
 - **OQ9 (LGPD usupesquisa*):** 16 flags de permissão de busca de paciente (default negado). Definir enforcement server-side em /api/pacientes e auditar concessões/mudanças.
 - **OQ10 (login uniqueness):** não há UNIQUE no banco (só índice não-único) → impor no serviço (findByLogin ≤1).
+
+## 🔎 Revisão (migration-reviewer) — 2026-06-30
+
+**Veredito:** segredos/LGPD sólidos (PASS); 1 BLOCK de segurança encontrado e **CORRIGIDO** nesta sessão; FLAGs
+viram OQ11-OQ15 (resolver antes de `/verify-parity` e do bridge `--commit`).
+
+### ✅ BLOCK CORRIGIDO — gate de bloqueio (R5) não era aplicado na emissão do token
+`AuthController.login` autenticava via `loadUserByUsername` + `encoder.matches`, mas **nunca checava
+`isEnabled()`/`isAccountNonLocked()`** → um usuário **bloqueado** (UsuBloq=1) com senha bcrypt migrada, ou um
+usuário **não-migrado** (disabled), **receberia um JWT válido** (o filtro JWT é stateless e não re-checa).
+**Correção:** `AuthController` agora chama `AccountStatusUserDetailsChecker.check(u)` **após** a senha correta
+(semântica R5: rejeita bloqueado só depois da senha certa) — `LockedException`→"Usuário bloqueado",
+`DisabledException`→"redefina sua senha"; idem em `/auth/refresh` (usuário bloqueado depois da emissão não
+renova). Coberto por `AuthControllerTest` (5 testes). Mensagens genéricas (R3) mantidas para usuário
+inexistente/senha errada.
+
+### FLAGs registrados (não-bloqueantes para `tested`; resolver antes do cutover)
+- **OQ11 (auditoria de login — timing):** o audit `LOGIN` + carimbo de último acesso disparam dentro de
+  `loadUserByUsername` (**antes** da verificação de senha no `AuthController`) e em **todo** `/auth/refresh`
+  → super-reporta logins e re-carimba a cada refresh. Mover o audit/stamp para o ponto de sucesso de
+  credencial no `AuthController` e distinguir login de refresh. (LGPD OQ5.)
+- **OQ12 (SAU_PRF — nomes de coluna não introspectados):** `findPerfilNome` assume `select prfnom from
+  sau_prf where prfcod=?` (inferido do glossário). Se errado, a elevação a admin **silenciosamente nunca
+  acontece** → todo não-SYSMAR vira só `SAUDE_CADASTRO` e admins perdem acesso no cutover. Introspectar o
+  banco vivo e confirmar `prfcod`/`prfnom` antes do cutover.
+- **OQ13 (elevação admin por substring "ADMIN"):** `isAdminProfile` casa substring case-insensitive "ADMIN"
+  no nome do perfil → "ADMINISTRATIVO"/"ADMISSAO" seriam elevados indevidamente a `ROLE_SAUDE_ADMIN`/`ROLE_ADMIN`
+  (acesso ao CRUD `/api/usuarios`). Confirmar o(s) nome(s)/código(s) reais do perfil admin e casar exato.
+- **OQ14 (nextUsuCod — full-scan + corrida):** `UsuarioService.nextUsuCod()` carrega TODOS os usuários para
+  `max+1` (scan de tabela a cada create + janela de corrida → PK duplicada). Trocar por `select max(usucod)`
+  ou sequência; confiar na falha de PK para a corrida.
+- **OQ15 (fixtures de paridade ausentes):** não há `src/test/resources/parity/sau_usu/`. Criar os 8 cenários
+  do bloco `parity` antes de `/verify-parity`; o cenário **bloqueado-após-senha** é obrigatório (reproduz o
+  BLOCK acima). Lembrar a divergência documentada: login moderno v1 é só por login (R3 login-por-unidade
+  deferido para a fatia de autorização fina).
 ```
