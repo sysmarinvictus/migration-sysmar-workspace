@@ -37,4 +37,4 @@ secret serialization, the password bridge, and audit PHI handling were **clean**
 
 ## Follow-up
 - Configure Aikido (`/aikido:setup <key>` + restart) and run `aikido:scan` for the dependency/CVE/SCA layer this manual review does not cover.
-- Add a **`prod` profile** + pin `SPRING_PROFILES_ACTIVE` in the eventual deploy manifest (Dockerfile/compose/CI) — none exists yet; the empty default + `ProductionSecurityGuard` are the current safeguards.
+- ✅ **`prod` profile added** (`application-prod.yml`): API docs/Swagger disabled, actuator reduced to `/health` (no details), SQL logging off, Flyway validates the populated DB, CORS + all secrets required from env (no fallbacks). Smoke-tested against the snapshot: dev secret → `ProductionSecurityGuard` aborts; strong secret → boots, `/health` UP, `/swagger-ui.html` 404, no dev backdoor bean. **Still TODO:** a deploy manifest (Dockerfile/compose/CI) that pins `SPRING_PROFILES_ACTIVE=prod` and supplies the env.
