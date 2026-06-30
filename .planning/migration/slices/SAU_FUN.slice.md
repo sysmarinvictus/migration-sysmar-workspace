@@ -101,6 +101,15 @@ status_was: specced
 
 (R4 normalize-name, R10/R11 address validations: diferidos com o painel de endereço → fatia SYS_PES.)
 
+## 🅿️ Veredito de paridade (2026-06-30) — BEHAVIORAL PARITY
+Fixtures em `backend/src/test/resources/parity/funcionario/`. WW legado (hwwsau_fun) é auth-gated → sem
+golden HTML headless (como SAU_PRO/SAU_IMP); paridade **comportamental** vs DB vivo + regras. **7/7 cenários
+BEHAVIORAL-PARITY** (12 ITs no caminho HTTP→service→JPA→Postgres com DDL idêntico + dados golden do snapshot
+vivo: 1148 total / 1147 ativos / 1086 user-linked / nome~silva=117). **Sem PHI** nos fixtures (só FunPesCod +
+situação + tamanhos). **PENDENTE p/ `verified`:** rodar o app vivo via `/dev-stack` (terminal real) e bater
+GET /api/funcionarios/57|436|597 + ?nome=silva contra o golden — o sandbox não sustentou servidor longo
+(sleep bloqueado / background exit 144). Mapeamento já provado por IT.
+
 ## 🔎 Revisão (migration-reviewer) — 2026-06-30
 Cobertura de regras OK (R1-R3,R5-R9,R12-R18 implementadas+testadas; R4/R10/R11 diferidas). **Corrigido:** `get()`
 não auditava leitura de PHI → agora `audit.record("READ","SAU_FUN",id)` (espelha SAU_PRO; list/lookup seguem o
