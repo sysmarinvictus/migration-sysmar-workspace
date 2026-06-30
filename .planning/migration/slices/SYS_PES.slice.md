@@ -71,8 +71,15 @@ phi_fields: [nome, nomeFantasia, nomeSocial, cpfCnpj, cns, nis, rgIe, rgUf, titu
 secrets: [PesSenha, PesSenhaKey]   # reversible password+key — NEVER in DTO/API/OpenAPI/log/fixture
 auth: { roles_required: [SAUDE_CADASTRO], notes: "no own module guard (BC); governed by owning subtype. Any read endpoint must be authenticated + AUDITED (PHI)." }
 
-status: specced   # extracted 2026-06-30; awaiting design + security sign-off before /migrate-slice
-status_was: pending
+status: tested   # ADDITIVE read slice implemented 2026-06-30 (OQ1 = additive, user-chosen). Suite 327/0F/0E.
+# Gerado (…/pessoa/): Pessoa entity (subconjunto read; PesSenha/PesSenhaKey QUARENTENADOS — não mapeados),
+# PessoaRepository (search nativo CAST + lookup + findCpfOwners person-wide), PessoaService (get[audit READ
+# PHI] + search/lookup honrando nome social R2/R3 + validadores CPF/CNS centralizados aditivos), PessoaController
+# (/api/pessoas GET /{id} /search /lookup, SAUDE_CADASTRO, sem mutação). V1 baseline +6 cols SYS_PES.
+# SAU_PRO/SAU_FUN INALTERADOS (sem refator @MapsId). Testes: PessoaServiceTest (8) + PessoaControllerIT (7).
+# DIFERIDO (sign-off): OQ2 PesSenha (bridge/quarentena), OQ3 wiring dos validadores nos subtipos, OQ6 FKs de
+# lookup não migrados. /verify-parity pendente.
+status_was: specced
 ```
 
 ## Regras mineradas (citação à linha; confiança)
