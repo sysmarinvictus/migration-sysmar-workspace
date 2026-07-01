@@ -14,7 +14,8 @@ wave: 6
 complexity: L                           # BACKLOG.md:107 "L (460)". NB impl=471 KB; effective surface is XL
                                         # (print rsau_recesp 143 KB + _pagint 111 KB + copia 33 KB + child wc 110 KB)
 primary_table: SAU_RECESP               # + child SAU_RECESP1 (line items) — this is a MASTER+CHILD aggregate
-status: specced
+status: tested                          # backend + tests done (29 unit + 13 IT, 0 failures). NOT verified —
+                                        # blocked on the 8 regulatory OQs + /verify-parity (CLAUDE Rule 5).
 
 constellation:                          # bytes from ls of Receituario/JavaModel/web/
   transaction: sau_recesp.java                 # 1176
@@ -148,6 +149,17 @@ Full list persisted from `gx-rule-miner`. Summary by confidence: **high 18, medi
 - **Q1** `RecTip` (master type, all 0 live) — does it encode A/B1/B2/C notification categories? Confirm in KB before exposing.
 - **Q2** `RecEspCon` (status/confirm) — no lifecycle in code; is confirmation/cancellation handled elsewhere or dead?
 - **Q3 (action, not regulatory)** `/migrate-slice` must re-introspect **SAU_RECESP1** and extend V14 with its 9 missing columns (see `persistence.child_v14`).
+
+## Post-implementation review (2026-07-01, migration-reviewer) — 0 BLOCK
+Backend generated in `receituarioespecial/` (master+child aggregate, @IdClass ×2, no @ManyToOne). Reviewer:
+all dimensions PASS/FLAG, **no BLOCK**. Confirmed: every write + single-record read audited (R28); the
+`DELETE_BLOCKED` audit survives the rolled-back tx via `AuditPersistenceService` REQUIRES_NEW; delete-block
+airtight (no hard-delete path); V14 idempotent/no-op-on-live/no fabricated status column; entity types match
+live (smallint/char20/numeric(5,1)/boolean); native queries fully parameterized; SAUDE_CADASTRO on every
+endpoint. Conservative gated choices verified honest: R29 delete blocked (409, not ported), R14 deceased-block
+faithfully absent (documented), R24 ceilings not enforced. Tests: **29 unit + 13 IT, 0 failures**.
+Reviewer FLAGs (recorded below): parity fixtures pending; PHI search/list unaudited by project convention;
+add an R1/R2 allocator-concurrency IT; print(R32-36)+interaction(R27) deferred sub-slice.
 
 ## Regulatory open_questions — HUMAN / CRF / SECURITY SIGN-OFF REQUIRED (do NOT resolve in code; block cutover)
 1. **Numbering gaps & uniqueness** — legacy allocator races (R2) and hard-delete (R29) can both collide and leave gaps. Confirm Portaria 344/98 numbering rules before choosing the modern allocator.
