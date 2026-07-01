@@ -95,7 +95,7 @@ Own one small table, depend only on the Wave-0 foundation.
 |---|---|---|---|
 | `sau_par_amb` | SAU_PAR_AMB | Parâmetro ambulatorial | L (582) |
 | `sau_par_ger` | SAU_PAR_GER | Parâmetro geral / Gerente | M (138) |
-| `sau_paccns` | SAU_PACCNS | CNS do paciente | M (104) |
+| ~~`sau_paccns`~~ | ~~SAU_PACCNS~~ | ~~CNS do paciente~~ | ~~M (104)~~ | **COLLAPSED into SAU_PAC** (2026-07-01) — no physical table; the CNS is one scalar `SYS_PES.PesNumCns` already written+validated (R2/R3/R4) by `POST/PUT /api/pacientes`. See `slices/SAU_PACCNS.slice.md`. |
 | `sau_usuuni` | SAU_USUUNI | Usuário × Unidade | L (509) |
 
 ## Wave 6 — Patient + special prescription (core, last)
