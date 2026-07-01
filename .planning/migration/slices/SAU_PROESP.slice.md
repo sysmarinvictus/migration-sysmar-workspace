@@ -36,8 +36,29 @@ endpoints:   # sub-resource of profissional; SAUDE_CADASTRO
   - { method: DELETE, path: /api/profissionais/{proPesCod}/especialidades/{espCod},  note: "R5 blocked if SAU_IMP exists" }
 phi_fields: []      # RBAC/clinical association — no patient PHI
 auth: { roles_required: [SAUDE_CADASTRO] }
-status: specced
-status_was: pending
+status: tested
+status_was: specced
+open_questions:
+  - id: OQ1-proesp1
+    text: >
+      The legacy `sau_proesp` transaction manages a SECOND physical table, **SAU_PROESP1** — the
+      per-unit / per-period schedule detail: PK (ProPesCod, EspCod, ProEspUniCod, ProEspPer) + weekday
+      flags (ProEspDom/Seg/Ter/Qua/Qui/Sex/Sab) + ProEspExpEsus. **R6 ("Informe o Período!") belongs to
+      SAU_PROESP1, NOT SAU_PROESP.** This slice migrated ONLY the SAU_PROESP master row (Pri/Sit + the
+      Man/Tar/Noi aggregate quotas). SAU_PROESP1 is a DEFERRED sub-slice. Before cutover: confirm whether
+      the UI needs the period schedule; if so, backlog `SAU_PROESP1`. Do NOT enforce R6 against SAU_PROESP.
+    status: deferred
+  - id: OQ2-parity
+    text: >
+      No parity fixtures yet (`parity/profissionalespecialidade/` absent) — expected at `tested`. Run
+      `/verify-parity SAU_PROESP` against the legacy app (MunCod=411420) before cutting the route over;
+      do NOT cut over on unit+IT alone.
+    status: open
+  - id: OQ3-situacao-bounds
+    text: >
+      `EspecialidadeUpdateRequest.situacao` is a free Short; legacy cmbProEspSit only offers 1=Ativo /
+      2=Inativo. Low risk (an out-of-domain value would be accepted). Optionally constrain to {1,2}.
+    status: open
 ```
 
 ## Regras mineradas (citação à linha — sau_proesp_impl.java)
@@ -46,7 +67,7 @@ status_was: pending
 - **R3** (default, high) — `ProEspSit` default **1** (Ativo) no insert. src `:259`. → `#defaultsSituacaoToAtivo`.
 - **R4** (default, high) — `ProEspPri` é checkbox 0/1 ('prioritário'); default **0**. src `:912,918`. → `#prioritarioDefaultsFalse`.
 - **R5** (validation, high, **delete-guard**) — Delete bloqueado se existe **SAU_IMP** para (ProPesCod,EspCod) → "CannotDeleteReferencedRecord 'Impedimento'". Cursor `SELECT ImpCod FROM SAU_IMP WHERE ProPesCod=? AND EspCod=? LIMIT 1`. src `:2447,5462`. → `#blocksDeleteWhenImpedimentoExists`. **⚠ impedimentos NÃO bloqueiam prescrições** (só o vínculo pro-esp).
-- **R6** (validation, med) — quantidades de agenda por período (manhã/tarde/noite) — "Informe o Período!" quando qtd sem período. src `:2880`. Tratar como Short ≥0; portar simples.
+- **R6** (validation, med) — ⚠ **FORA DE ESCOPO — pertence a SAU_PROESP1** (não a SAU_PROESP). "Informe o Período!" é do subgrid de agenda por unidade/período (SAU_PROESP1: ProPesCod,EspCod,ProEspUniCod,ProEspPer + flags dia-da-semana). src `:2880,5438,5469`. Sub-slice DIFERIDO (ver open_questions OQ1-proesp1). As qtds Man/Tar/Noi desta fatia são os agregados do master, não o schedule.
 - **R7** (validation, high) — PK composta única (ProPesCod,EspCod) — não adicionar a mesma especialidade 2× ao profissional (DuplicatePrimaryKey → Conflict).
 - **R8** (audit, high) — CRUD → `psau_inc_log`/SAU_LOG → mapear `common/audit`.
 
@@ -70,3 +91,10 @@ status_was: pending
 ## Notas de contexto
 - Nada foi implementado/commitado ainda para esta fatia (só este spec). Baseline stub atual: `SAU_PROESP (ProPesCod, EspCod)` PK apenas.
 - Padrão de referência pronto: `…/autorizacao/` (SAU_PRFCON/USUCON @IdClass) e `…/impedimento/` (SAU_IMP, o delete-guard alvo).
+
+## Resultado (2026-06-30 — /migrate-slice)
+Backend (entity+IdClass+repo+service+dto+controller) + testes (Service 12, IT 11 Testcontainers) +
+frontend (painel de especialidades embutido em ProfissionalDetailPage) implementados. Suíte completa
+**405 testes, 0 falhas** (baseline ALTERs aditivos não regrediram nada). OpenAPI regenerado (84 paths,
++4 endpoints SAU_PROESP em `frontend/openapi.json`). `migration-reviewer`: **READY, 0 BLOCK**; 3 FLAGs →
+open_questions (OQ1 SAU_PROESP1 diferido, OQ2 parity, OQ3 bounds de situação). Próximo: `/verify-parity`.
