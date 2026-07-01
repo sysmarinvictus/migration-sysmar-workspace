@@ -106,8 +106,8 @@ phi_fields: [nome, nomeSocial, nomePai, nomeMae, nomeConjuge, cpfCnpj, cns, rgIe
   cep, endereco, enderecoNumero, enderecoComplemento, bairroCod, municipioCod, telefone, celular, fax,
   email, certidaoNumero, certidaoData, ctpsNumero, ctpsSerie, pisPasep, tituloEleitorNumero, nis, observacao]
 auth: { roles_required: [SAUDE_CADASTRO], enforced_via: "pisauthorized(\"SAU_PESF\") impl:2313-2331 (INFERENCE — confirm program/permission)" }
-status: specced
-status_was: pending
+status: tested
+status_was: specced
 ```
 
 ## Regras mineradas (citação `sau_pesf_impl.java:linha` salvo indicação) — 59 regras
@@ -143,13 +143,19 @@ status_was: pending
 7. **CHAR(n) blank-padded** — todo `@JdbcTypeCode(CHAR)` precisa getter trim; comparações de parity trimam os dois lados.
 
 ## OPEN QUESTIONS — resolver ANTES de `/migrate-slice` (sign-off humano)
-- **OQ1 — Escopo do provisionamento de subtipo (R56/R57/R58). DECISÃO DE PRODUTO.** O legado, ao salvar uma Pessoa Física, cria automaticamente SAU_FUN/SAU_PRO/SAU_PAC conforme `tipoCadastro` e redireciona. **Recomendação:** SAU_PESF v1 = **cadastro puro de pessoa** (POST/PUT/DELETE em SYS_PES); o provisionamento de subtipo permanece nos fluxos existentes de SAU_PRO/SAU_FUN. Motivos: (a) **SAU_PAC é Wave 6 e não existe** → não dá para provisionar paciente; (b) cross-entity writes numa fatia de supertipo aumentam muito o raio de teste/risco; (c) mantém a fatia aditiva e reversível. **Alternativa:** implementar provisionamento SAU_FUN/SAU_PRO agora (sem paciente) via um campo `tipoCadastro` no request. → **precisa da escolha do usuário.**
+- **OQ1 — Escopo do provisionamento de subtipo (R56/R57/R58). ✅ RESOLVIDO 2026-06-30 (usuário): CADASTRO PURO DE PESSOA.** SAU_PESF v1 = POST/PUT/DELETE em SYS_PES; **R56/R57/R58 fora de escopo** — o provisionamento SAU_FUN/SAU_PRO permanece nos fluxos existentes; paciente é Wave 6. Não implementar `tipoCadastro`/criação de subtipo nesta fatia.
+- **PK insert:** `PesCod = MAX(PesCod)+1` (vazio→1), espelhando `psau_inc_pes.java:52-69` (loop-lock). Nota: MAX+1 num strangler-fig com o legado ainda inserindo tem risco de corrida — aceitável p/ paridade (o legado faz igual); revisitar com sequence/advisory-lock se necessário.
+- **Insert literals:** o INSERT legado (T000X24) grava `PesSenha/PesSenhaKey=''`, bloco PJ=''/0, `PesSasFlag/PesSauFlag=0`. O write novo deixa esses NÃO-mapeados → NULL. Divergência '' vs NULL conhecida (colunas nullable) — a parity confirma se é aceitável.
 - **OQ2 — Credenciais PesSenha/PesSenhaKey.** Mantidas **quarentenadas** (não mapeadas). O write novo insere linha SYS_PES SEM tocar nessas colunas (legado grava ''). Confirmar que deixá-las NULL em linhas novas é aceitável (vs. legado ''); e o sign-off de segurança da senha reversível continua pendente (compartilhado com SYS_PES OQ2). Ver [[reference_sys_pes_supertype]].
 - **OQ3 — Auditoria LGPD.** O legado não audita; o app novo DEVE auditar toda leitura/escrita de PHI em SYS_PES (`common/audit`). Confirmar o volume (READ em GET/{id} e search) para não gerar ruído excessivo.
 - **OQ4 — RBAC / permissão.** `SAUDE_CADASTRO` é inferência; confirmar o programa/permissão real de SAU_PESF (KB / AcessaModulo.xml). RBAC por-programa (SAU_RBAC) existe mas não está plugado — ver [[reference_rbac_engine_not_wired]].
 - **OQ5 — Algoritmos de identificador.** CPF/CNPJ (`psau_val_cnpjcpf`), CNS (`psau_val_cns`) e soundex (`psau_soundex`) já têm equivalentes no app (`CpfValidator`/`CnsValidator`/`SoundexService`). Confirmar equivalência exata dos DVs/algoritmo p/ parity antes de confiar.
 - **OQ6 — Colisão com o read model.** O POST/PUT em `/api/pessoas` passa a ser escrita num controller hoje read-only (SAUDE_CADASTRO). O read atual expõe subconjunto; garantir que o response de escrita não vaze PHI além do já exposto e que a validação (Zod/RHF no front) cubra as 59 regras.
-- **OQ7 — SYS_MUN/SAU_ETN/SAU_PAIS/SAU_ORGEMI** status de migração não confirmado; são lookups por-id raw (não bloqueiam), mas confirmar antes do cutover.
+- **OQ7 — SYS_MUN/SAU_ETN/SAU_PAIS/SAU_ORGEMI** status de migração não confirmado; são lookups por-id raw (não bloqueiam), mas confirmar antes do cutover. (V10 cria stubs mínimos de SAU_ETN/SAU_PAIS/SAU_ORGEMI p/ os probes de FK.)
+- **OQ8 — R11 (CEP válido p/ município) DIFERIDO** (registrado em `PessoaCadastroService` validateAndDerive): só R10 (obrigatório) é aplicado; a validação CEP↔município (`psau_valcep`) precisa da lógica de referência de CEP. Implementar ou confirmar deferimento antes do cutover.
+- **OQ9 — R45 uniqueness usa `LIKE prefixo`** (`PessoaRepository.findCpfOwners`, herdado do read-slice): p/ CPF de 11 dígitos fixos o prefixo == exato, mas se o valor gravado for FORMATADO ('111.444...') o probe digits-only não casa. A parity confirma o formato gravado; se necessário, normalizar ambos os lados p/ dígitos.
+- **OQ10 — R44 valida só CPF** (não CNPJ): não existe `isValidCnpj` no projeto. Aceitável p/ pessoa física (tipoPessoa=2); se PJ ocorrer, adicionar validação de CNPJ.
+- **REVIEW (2026-06-30, migration-reviewer):** core PASS; BLOCK único = parity ausente (esperado pré-`/verify-parity`, mesmo gate do SAU_PROESP). FLAGs → OQ8/OQ9/OQ10 + testes R34/R35-R38/R47 adicionados (51 unit). Status → **tested** (não verified até parity).
 
 ## Notas
 - Nada de código ainda — só este spec (gx-extract para antes da geração). Reference slice de pessoa-subtype: `profissional/` (SAU_PRO, mesmo padrão CHAR-trim + SoundexService + CertificadoSenhaCryptoConverter).
