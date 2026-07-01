@@ -112,3 +112,19 @@ R15 hard-delete mantém pessoa). V13: ADD COLUMN das ~21 cols SAU_PAC + `ALTER P
 - **OQ4 — delete-guards extras:** SAU_PESF_PAC / SAU_PACCNS podem referenciar PacPesCod; o BC do SAU_PAC só checa SAU_RECESP. Confirmar FKs live.
 - **OQ5 — sessão-unidade:** R10 (CadAltUniCod = unidade da sessão) precisa de unidade na sessão; o modelo de auth atual (JWT) não carrega unidade. Aceitar do request/deixar null por ora (OQ).
 - **OQ6 — parity:** `/verify-parity SAU_PAC` (comparar SAU_PAC + write-back SYS_PES no golden-master).
+
+## REVIEW (2026-07-01, migration-reviewer) — core PASS; ações tomadas
+Reviewer rodou os testes (Service 16→**19**, IT 10, 0 falhas). PHI/audit/security/schema = PASS.
+Ajustes feitos após o review:
+- **Testes de `update()` adicionados** (3): mantém CNS próprio (selfId exclui R3), rejeita CNS de outro
+  paciente, not-found. Era a lacuna real na fatia mais sensível.
+- **R9/R10 (colunas unidade-audit) e R18 (máscara LGPD) marcadas explicitamente DIFERIDAS no código**
+  (comentário honesto — antes o `// R10/R11` implicava feito). R9/R10 = precisam de unidade na sessão
+  (OQ5); R18 = máscara CPF/CNS só faz sentido p/ caller sem full-view (hoje só SAUDE_CADASTRO acessa, OQ3).
+- **FLAGs resolvidos com introspecção live:** (a) `PacProNum` no live É `character(10)` → o `ALTER ... TYPE
+  CHAR(10)` do V13 é metadata-only (sem rewrite/lock na tabela de 80k). (b) O live **NÃO** tem coluna
+  `SAU_PAC.PacPesNom` (só o stub do baseline a criou como artefato) → não há cópia denormalizada p/ manter.
+  (c) `SAU_UNI.UniCadCPF` já existe no baseline (V1:266) → o ADD do V13 é no-op redundante (inofensivo).
+- **Permanecem como gates de cutover (OQ):** OQ1 (soft vs hard delete Portaria 344 — sign-off), OQ4 (guards
+  extras SAU_PACCNS/SAU_PESF_PAC — confirmar FKs live), OQ6 (parity). PK MAX+1 tem janela de corrida
+  (igual ao legado) — revisitar com sequence.
