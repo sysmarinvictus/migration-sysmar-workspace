@@ -102,8 +102,8 @@ Own one small table, depend only on the Wave-0 foundation.
 
 | Transaction | Primary table | Description | Complexity | Cycle |
 |---|---|---|---|---|
-| `sau_pesf_pac` | SAU_PESF_PAC | Vínculo profissional ↔ paciente | XL (728) | |
-| `sau_pac` | SAU_PAC | **Paciente** (reference slice) | XL (925) | pac↔recesp |
+| `sau_pesf_pac` | SAU_PESF_PAC | Cadastro de Paciente (wizard) — **COLLAPSED into SAU_PAC** (2026-07-01); core=`POST /api/pacientes`, deltas (fuller validation, multi-subtype) deferred | XL (728) | |
+| `sau_pac` | SAU_PAC | **Paciente** (reference slice) — **tested** | XL (925) | pac↔recesp |
 | `sau_recesp` | SAU_RECESP | Receituário Controle Especial | L (460) | pac↔recesp · **Portaria 344/98** |
 
 ---
